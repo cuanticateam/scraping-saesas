@@ -116,6 +116,99 @@ def obtener_links_listado():
 # 2. SCRAPING - DETALLE DE CADA INMUEBLE
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def extraer_nombre(descripcion, titulo):
+    """Extrae el nombre del lugar/edificio de la descripcion del inmueble."""
+    texto = descripcion or ""
+
+    # Palabras genericas que NO son nombres propios de edificios
+    GENERICAS = {
+        "en estructura", "tradicional", "propiedad horizontal",
+        "uso residencial", "uso comercial", "uso mixto",
+        "comercial y residencial", "residencial y comercial",
+        "ubicado en", "sector de", "el cual consta",
+    }
+
+    # Patrones para nombres de lugares en la descripcion
+    # Cada patron captura: (prefijo completo, nombre propio)
+    # Terminadores: palabras comunes que indican fin del nombre propio
+    TERM = r"(?:\s*[,.]|\s+Propiedad|\s+Cuenta|\s+Ubicad|\s+Con\b|\s+Se\b|\s+El\s+Cual|\s+Barrio|\s+Ph\b|\s+P\.H)"
+    patrones = [
+        rf"(Centro\s+Comercial)\s+([A-ZÀ-Ü][A-Za-zÀ-üñÑ\s]+?){TERM}",
+        rf"(Edificio|Ed\.)\s+([A-ZÀ-Ü][A-Za-zÀ-üñÑ]+(?:\s+[A-ZÀ-Ü][A-Za-zÀ-üñÑ]+)*){TERM}",
+        rf"(Condominio)\s+([A-ZÀ-Ü][A-Za-zÀ-üñÑ\s]+?){TERM}",
+        rf"(Conjunto\s+(?:Residencial\s+|Cerrado\s+)?)\s*([A-ZÀ-Ü][A-Za-zÀ-üñÑ\s]+?){TERM}",
+        rf"(Urbanizaci[oó]n|Urb\.?)\s+([A-ZÀ-Ü][A-Za-zÀ-üñÑ\s]+?){TERM}",
+        rf"(Torre)\s+([A-ZÀ-Ü][A-Za-zÀ-üñÑ]+(?:\s+[A-ZÀ-Ü][A-Za-zÀ-üñÑ]+)*){TERM}",
+        rf"(Unidad\s+Residencial)\s+([A-ZÀ-Ü][A-Za-zÀ-üñÑ\s]+?){TERM}",
+        rf"(Mall)\s+([A-ZÀ-Ü][A-Za-zÀ-üñÑ\s]+?){TERM}",
+        rf"(Plaza)\s+([A-ZÀ-Ü][A-Za-zÀ-üñÑ\s]+?){TERM}",
+        rf"(Hotel)\s+([A-ZÀ-Ü][A-Za-zÀ-üñÑ\s]+?){TERM}",
+    ]
+
+    for pat in patrones:
+        m = re.search(pat, texto, re.IGNORECASE)
+        if m:
+            prefijo = m.group(1).strip()
+            nombre = m.group(2).strip()
+            # Filtrar nombres genericos
+            if any(g in nombre.lower() for g in GENERICAS):
+                continue
+            if len(nombre) < 2:
+                continue
+            nombre_completo = f"{prefijo} {nombre}".strip()
+            nombre_completo = re.sub(r"\s+", " ", nombre_completo)
+            if 4 < len(nombre_completo) < 60:
+                return nombre_completo.title()
+
+    # Fallback: buscar ubicacion en la descripcion (barrio, sector, comuna)
+    ubicacion_pats = [
+        r"(?:ubicad[oa]?\s+en\s+(?:el\s+)?(?:barrio|sector)\s+)([A-ZÀ-Ü][A-Za-zÀ-üñÑ\s]+?)(?:\s+de\s+la\s+comuna|\s+del?\s+municipio|\s*[,.])",
+        r"(?:barrio\s+)([A-ZÀ-Ü][A-Za-zÀ-üñÑ\s]+?)(?:\s+de\s+la\s+comuna|\s+del?\s+municipio|\s*[,.])",
+        r"(?:sector\s+(?:de\s+)?)([A-ZÀ-Ü][A-Za-zÀ-üñÑ]+(?:\s+[A-ZÀ-Ü][A-Za-zÀ-üñÑ]+)*)(?:\s*[,.]|\s+de\b|\s+del\b|\s+el\b)",
+    ]
+    for pat in ubicacion_pats:
+        m = re.search(pat, texto, re.IGNORECASE)
+        if m:
+            ubicacion = m.group(1).strip()
+            if (len(ubicacion) > 2
+                and ubicacion.lower() not in ("el", "la", "del")
+                and not any(g in ubicacion.lower() for g in GENERICAS)):
+                return ubicacion.title()
+
+    # Fallback titulo: nombre despues de "FMI xxx"
+    if titulo:
+        # "Apartamento FMI 001-574744  Condominio Orion" -> "Condominio Orion"
+        m = re.search(r"FMI\s+[\w-]+\s{2,}(.+?)$", titulo)
+        if not m:
+            m = re.search(r"FMI\s+[\w-]+\s+([A-Z][a-zA-ZÀ-üñÑ\s.]+)$", titulo)
+        if m:
+            nombre = m.group(1).strip()
+            if (len(nombre) > 2
+                and not re.match(r"^UE\s", nombre, re.IGNORECASE)
+                and not re.match(r"^/", nombre)
+                and not re.match(r"^\d", nombre)):
+                return nombre
+
+    # Fallback titulo: nombre entre tipo y FMI/codigo
+    if titulo:
+        # "Casa Quintas de San Luis FMI xxx" -> "Quintas de San Luis"
+        tipos_re = r"(?:Casa|Apartamento|Apartaestudio|Local\s+Comercial|Oficina|Bodega|Edificio|Hotel|Edificacion|Parqueadero|Local|Apt)"
+        m = re.search(rf"^{tipos_re}\s+(.+?)\s*(?:FMI|-FMI|$)", titulo, re.IGNORECASE)
+        if m:
+            nombre = m.group(1).strip()
+            # Limpiar sufijos como "- 001-xxx"
+            nombre = re.sub(r"\s*-\s*[\d][\d\-/]+.*$", "", nombre).strip()
+            if (len(nombre) > 2
+                and not re.match(r"^[\d\-\s]+$", nombre)
+                and not re.match(r"^0\d[NnSs]", nombre)
+                and not re.match(r"^UE\s", nombre, re.IGNORECASE)
+                and not re.match(r"^-\s", nombre)
+                and not re.match(r"^de\s+recreo", nombre, re.IGNORECASE)):
+                return nombre
+
+    return ""
+
+
 def scrape_detalle(url, idx, total):
     """Extrae datos de la pagina de detalle de un inmueble."""
     for intento in range(3):
@@ -179,11 +272,23 @@ def scrape_detalle(url, idx, total):
     if not tipo and titulo:
         tipo = titulo.split("-")[0].strip() if "-" in titulo else titulo
 
+    # Descripcion del inmueble
+    descripcion = ""
+    h2_desc = soup.find("h2", string=re.compile(r"Descripci[oó]n del inmueble", re.IGNORECASE))
+    if h2_desc:
+        h5 = h2_desc.find_next_sibling("h5")
+        if h5:
+            descripcion = h5.get_text(strip=True)
+
+    # Extraer nombre del lugar/edificio de la descripcion
+    nombre = extraer_nombre(descripcion, titulo)
+
     slug = url.rstrip("/").split("/")[-1]
-    print(f"  [{idx}/{total}] {titulo or slug}")
+    print(f"  [{idx}/{total}] {titulo or slug} -> {nombre}")
 
     return {
         "_id": slug,
+        "nombre": nombre,
         "tipo": tipo,
         "direccion": direccion,
         "area": area,

@@ -26,9 +26,9 @@ COLOR_FILA2   = {"red": 1.0,  "green": 1.0,  "blue": 1.0}    # blanco
 COLOR_CAMBIO  = {"red": 1.0,  "green": 0.85, "blue": 0.85}   # rojo claro
 COLOR_NUEVO   = {"red": 0.85, "green": 1.0,  "blue": 0.85}   # verde claro
 
-COLS = ["TIPO", "DIRECCION", "AREA", "FMI", "PRECIO", "LINK"]
-CAMPOS = ["tipo", "direccion", "area", "fmi", "precio", "link"]
-ANCHOS = [180, 320, 120, 180, 150, 450]
+COLS = ["NOMBRE", "TIPO", "DIRECCION", "AREA", "FMI", "PRECIO", "LINK"]
+CAMPOS = ["nombre", "tipo", "direccion", "area", "fmi", "precio", "link"]
+ANCHOS = [250, 180, 320, 120, 180, 150, 450]
 
 COL_TZ = timezone(timedelta(hours=-5))
 
