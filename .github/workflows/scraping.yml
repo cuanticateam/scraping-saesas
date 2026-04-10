@@ -1,0 +1,49 @@
+name: Scraping SAESAS Arriendos
+
+on:
+  schedule:
+    # 3 ejecuciones diarias hora Colombia (UTC-5)
+    - cron: '0 13 * * *'    #  8:00 AM COL
+    - cron: '0 17 * * *'    # 12:00 PM COL
+    - cron: '0 23 * * *'    #  6:00 PM COL
+  workflow_dispatch:         # Boton manual desde GitHub
+
+jobs:
+  scraping:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout codigo
+        uses: actions/checkout@v4
+
+      - name: Instalar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Instalar dependencias
+        run: pip install requests beautifulsoup4 gspread google-auth
+
+      - name: Restaurar datos anteriores (cache)
+        uses: actions/cache@v4
+        with:
+          path: |
+            datos_anteriores_saesas.json
+            registro_cambios_saesas.json
+          key: saesas-data-${{ github.run_number }}
+          restore-keys: |
+            saesas-data-
+
+      - name: Preparar datos si no hay cache
+        run: |
+          [ -f datos_anteriores_saesas.json ] || echo "{}" > datos_anteriores_saesas.json
+          [ -f registro_cambios_saesas.json ] || echo "{}" > registro_cambios_saesas.json
+
+      - name: Ejecutar scraping
+        env:
+          EMAIL_REMITENTE: ${{ secrets.EMAIL_REMITENTE }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_DESTINATARIO: ${{ secrets.EMAIL_DESTINATARIO }}
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          SPREADSHEET_ID_SAESAS: ${{ secrets.SPREADSHEET_ID_SAESAS }}
+        run: python scraping_saesas.py
