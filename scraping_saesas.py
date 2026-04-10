@@ -5,14 +5,24 @@ Extrae inmuebles en arriendo en Medellin, detecta cambios y notifica por email.
 Funciona local y en GitHub Actions.
 """
 
-import requests, json, re, os, smtplib, time, urllib3
+import requests, json, re, os, smtplib, time, urllib3, socket
 from datetime import datetime, timedelta, timezone
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from bs4 import BeautifulSoup
+from requests.adapters import HTTPAdapter
 
 # Suprimir warnings de SSL
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# Forzar IPv4 (GitHub Actions falla con IPv6 en saesas.gov.co)
+_orig_getaddrinfo = socket.getaddrinfo
+def _ipv4_only(*args, **kwargs):
+    return _orig_getaddrinfo(*args, **kwargs, family=socket.AF_INET) if len(args) < 3 else _orig_getaddrinfo(*args, **kwargs)
+
+# Parche mas limpio: forzar AF_INET
+import urllib3.util.connection as urllib3_cn
+urllib3_cn.allowed_gai_family = lambda: socket.AF_INET
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONFIGURACION
