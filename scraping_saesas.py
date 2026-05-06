@@ -5,7 +5,7 @@ Extrae inmuebles en arriendo en Medellin, detecta cambios y notifica por email.
 Funciona local y en GitHub Actions.
 """
 
-import requests, json, re, os, smtplib, time, urllib3, socket
+import requests, json, re, os, smtplib, time, urllib3, socket, sys
 from datetime import datetime, timedelta, timezone
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -510,39 +510,46 @@ if __name__ == "__main__":
     print("  Inmuebles en arriendo - Medellin")
     print("=" * 55)
 
-    # Obtener links del listado
-    print("\n[1/4] Obteniendo listado de inmuebles...")
-    links = obtener_links_listado()
-    print(f"  {len(links)} inmuebles encontrados")
+    try:
+        # Obtener links del listado
+        print("\n[1/4] Obteniendo listado de inmuebles...")
+        links = obtener_links_listado()
+        print(f"  {len(links)} inmuebles encontrados")
 
-    # Scrape detalle
-    print("\n[2/4] Extrayendo detalles de cada inmueble...")
-    inmuebles = scrape_todos(links)
-    print(f"  {len(inmuebles)} inmuebles procesados")
+        # Scrape detalle
+        print("\n[2/4] Extrayendo detalles de cada inmueble...")
+        inmuebles = scrape_todos(links)
+        print(f"  {len(inmuebles)} inmuebles procesados")
 
-    # Detectar cambios
-    print("\n[3/4] Detectando cambios...")
-    cambios, resumen = detectar_cambios(inmuebles)
+        # Detectar cambios
+        print("\n[3/4] Detectando cambios...")
+        cambios, resumen = detectar_cambios(inmuebles)
 
-    if resumen:
-        print(f"\n  *** {len(resumen)} CAMBIOS DETECTADOS ***")
-        for c in resumen[:15]:
-            if c["tipo_cambio"] == "CAMBIO":
-                print(f"    - {c['titulo']}: {c['campo']} {c.get('antes','')} -> {c.get('ahora','')}")
-            else:
-                print(f"    - {c['tipo_cambio']} {c['titulo']}")
-        if len(resumen) > 15:
-            print(f"    ... y {len(resumen)-15} mas")
-    else:
-        print("  Sin cambios respecto a la ultima actualizacion")
+        if resumen:
+            print(f"\n  *** {len(resumen)} CAMBIOS DETECTADOS ***")
+            for c in resumen[:15]:
+                if c["tipo_cambio"] == "CAMBIO":
+                    print(f"    - {c['titulo']}: {c['campo']} {c.get('antes','')} -> {c.get('ahora','')}")
+                else:
+                    print(f"    - {c['tipo_cambio']} {c['titulo']}")
+            if len(resumen) > 15:
+                print(f"    ... y {len(resumen)-15} mas")
+        else:
+            print("  Sin cambios respecto a la ultima actualizacion")
 
-    # Google Sheets
-    print("\n[4/4] Actualizando Google Sheets...")
-    from sheets_sync_saesas import sync_to_sheets
-    sync_to_sheets(inmuebles, cambios)
+        # Google Sheets
+        print("\n[4/4] Actualizando Google Sheets...")
+        from sheets_sync_saesas import sync_to_sheets
+        sync_to_sheets(inmuebles, cambios)
 
-    # Email
-    if resumen:
-        enviar_email(resumen)
+        # Email
+        if resumen:
+            enviar_email(resumen)
 
-    print(f"\nListo! {len(inmuebles)} inmuebles en arriendo en Medellin")
+        print(f"\nListo! {len(inmuebles)} inmuebles en arriendo en Medellin")
+
+    except (requests.exceptions.ConnectTimeout, requests.exceptions.ConnectionError) as e:
+        print(f"\nSitio saesas.gov.co no disponible: {e}")
+        print("  El sitio puede estar caido o bloqueando conexiones.")
+        print("  Se reintentara en la proxima ejecucion programada.")
+        sys.exit(0)
